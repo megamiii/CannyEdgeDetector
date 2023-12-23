@@ -13,7 +13,30 @@ def gaussian_function(sigma):
     """
 
     # Your code (optional)
-    return
+    # Define the size of the 1D kernel
+    kernel_size = int(6*sigma + 1) # kernel size = 7 (6 + 1) ->  3 left-pixels + central pixel + 3 right-pixels
+
+    # Make sure the size is odd (to center the kernel perfectly over the image)
+    if (kernel_size % 2 == 0):
+        kernel_size += 1
+
+    # Create a 1D grid of x coordinates centered around 0 [-3 -2 -1 0 1 2 3]
+    x = np.linspace(
+        -(kernel_size // 2),
+        kernel_size // 2,
+        kernel_size
+    )
+    
+    # 1D Gaussian formula
+    gauss = np.exp(-x**2 / (2*sigma**2))
+    
+    # Normalize
+    gauss /= gauss.sum()
+    
+    # 2D Gaussian kernel is the outer product of two 1D Gaussians
+    kernel = np.outer(gauss, gauss)
+    
+    return kernel
 
 def convolution(array, kernel):
     """
@@ -26,7 +49,18 @@ def convolution(array, kernel):
     """
 
     # Your code (optional)
-    return
+    kernel_size = kernel.shape[0]
+    pad = kernel_size // 2
+    output = np.zeros_like(array)
+    padding = np.pad(array, pad, mode='constant') # padded array
+
+    rows, cols = array.shape
+
+    for i in range(rows):
+        for j in range(cols):
+            output[i, j] = np.sum(padding[i:i+kernel_size, j:j+kernel_size] * kernel)
+    
+    return output
 
 def gaussian_filter(input_image, sigma):
     """
@@ -39,7 +73,7 @@ def gaussian_filter(input_image, sigma):
     """
 
     # Your code
-    return
+    return convolution(input_image, gaussian_function(sigma))
 
 def sobel_filter(image):
     """
@@ -52,7 +86,25 @@ def sobel_filter(image):
     """
 
     # Your code
-    return
+    sobel_x = np.array([
+        [-1, 0, 1],
+        [-2, 0, 2],
+        [-1, 0, 1]
+    ])
+
+    sobel_y = np.array([
+        [1, 2, 1],
+        [0, 0, 0],
+        [-1, -2, -1]
+    ])
+
+    grad_x = convolution(image, sobel_x)
+    grad_y = convolution(image, sobel_y)
+    
+    grad_magnitude = np.sqrt(pow(grad_x, 2) + pow(grad_y, 2))
+    grad_direction = np.rad2deg(np.arctan2(grad_y, grad_x)) % 180
+
+    return grad_magnitude, grad_direction
 
 def non_max_suppression(gradient_magnitude, gradient_orientation):
     """
@@ -65,7 +117,31 @@ def non_max_suppression(gradient_magnitude, gradient_orientation):
     """
 
     # Your code
-    return
+    # Create an empty suppressed image
+    nms_image = np.zeros_like(gradient_magnitude)
+
+    rows, cols = grad_magnitude.shape
+    
+    for i in range(1, rows - 1):
+        for j in range(1, cols - 1):
+
+            gradient_direction = gradient_orientation[i, j] # Gradient direction at the current pixel
+            
+            if (0 <= gradient_direction < 22.5) or (157.5 <= gradient_direction < 180):
+                p, r = gradient_magnitude[i, j - 1], gradient_magnitude[i, j + 1] # left and right pixels
+            elif (22.5 <= gradient_direction < 67.5):
+                p, r = gradient_magnitude[i + 1, j - 1], gradient_magnitude[i - 1, j + 1] # bottom-left and top-right pixels
+            elif (67.5 <= gradient_direction < 112.5):
+                p, r = gradient_magnitude[i - 1, j], gradient_magnitude[i + 1, j] # top and down pixels
+            else: # elif (112.5 <= gradient_direction < 157.5)
+                p, r = gradient_magnitude[i - 1, j - 1], gradient_magnitude[i + 1, j + 1] # top-left and bottom-right pixels
+
+            # Compare the edge strength of the current pixel q (gradient_magnitude[i, j]) with those in positive and negative pixels (p and r)
+            # If the strength at q is the largest, preserve it, and otherwise, suppress it (i.e. set to 0).
+            if (gradient_magnitude[i, j] >= p) and (gradient_magnitude[i, j] >= r):
+                nms_image[i, j] = gradient_magnitude[i, j]            
+
+    return nms_image
 
 def double_threshold(image, low_threshold_rate, high_threshold_rate):
     """
@@ -79,7 +155,23 @@ def double_threshold(image, low_threshold_rate, high_threshold_rate):
     """
 
     # Your code
-    return
+    high_threshold = image.max() * high_threshold_rate
+    low_threshold = image.max() * low_threshold_rate
+
+    strong_pixel = 255
+    weak_pixel = 50
+    # suppressed_pixel = 0
+
+    dt_image = np.zeros_like(image)
+
+    strong_i, strong_j = np.where(image >= high_threshold) # Definetely an edge
+    weak_i, weak_j = np.where((image <= high_threshold) & (image >= low_threshold)) # Maybe an edge
+    # suppressed_i, suppressed_j = np.where(image < low_threshold) -> Definetely not an edge
+
+    dt_image[strong_i, strong_j] = strong_pixel
+    dt_image[weak_i, weak_j] = weak_pixel
+
+    return dt_image
 
 def hysteresis_threshold(image):
     """
@@ -91,7 +183,23 @@ def hysteresis_threshold(image):
     """
 
     # Your code
-    return
+    strong_pixel = 255
+    weak_pixel = 50
+    
+    rows, cols = image.shape
+
+    ht_image = image.copy()
+
+    for i in range(1, rows - 1):
+        for j in range(1, cols - 1):
+            # Check if the weak pixel is connected to a strong pixel
+            if (ht_image[i, j] == weak_pixel):
+                if (np.any(ht_image[i-1:i+2, j-1:j+2])):
+                    ht_image[i, j] = strong_pixel # If a weak edge is connected to a strong edge in the neighborhood, it becomes an edge
+                else:
+                    ht_image[i, j] = 0
+            
+    return ht_image
 
 if __name__ == "__main__":
     sigma = 1.5
@@ -101,7 +209,7 @@ if __name__ == "__main__":
     img = np.asarray(Image.open(os.path.join('images', 'son.jpg')).convert('L'))
     img = img.astype('float32')
 
-    logdir = os.path.join('results', 'HW1_2')
+    logdir = os.path.join('results', 'canny_edge_detector')
     if not os.path.exists(logdir):
         os.makedirs(logdir)
 
