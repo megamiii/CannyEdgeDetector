@@ -18,7 +18,9 @@ The CannyEdgeDetector is a complete implementation of the Canny edge detection a
 5. Finally, edge tracking by hysteresis is applied, which transforms weak pixels into strong ones if they are connected to strong pixels.
 
 ## Input
-![Input Image](images/son.jpg)
+- The image of Heung-min Son used for demonstrating the Canny Edge Detection algorithm is credited to YTN:  
+
+![Heung-min Son](https://image.ytn.co.kr/general/jpg/2017/0914/201709140709095091_t.jpg)
 
 ## Results
 This project includes a set of result images which illustrate the steps of the Canny edge detection process:
